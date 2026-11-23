@@ -975,6 +975,46 @@ describe('vi.spyOn() restoration', () => {
     expect(object.getter).toBe(42)
     expect(spy2.mock.calls).toHaveLength(1)
   })
+
+  test('vi.restoreAllMocks() restores other spies when one restore throws', () => {
+    const frozen = createObject()
+    const other = createObject()
+    vi.spyOn(frozen, 'method')
+    vi.spyOn(other, 'method')
+    Object.freeze(frozen)
+
+    expect(() => vi.restoreAllMocks()).toThrowErrorMatchingInlineSnapshot(
+      `[TypeError: Cannot redefine property: method]`,
+    )
+    expect(vi.isMockFunction(other.method)).toBe(false)
+    expect(vi.isMockFunction(frozen.method)).toBe(true)
+    expect(() => vi.restoreAllMocks()).not.toThrow()
+  })
+
+  test('vi.restoreAllMocks() throws an AggregateError when several restores throw', () => {
+    const first = createObject()
+    const second = createObject()
+    vi.spyOn(first, 'method')
+    vi.spyOn(second, 'method')
+    Object.freeze(first)
+    Object.freeze(second)
+
+    let error: unknown
+    try {
+      vi.restoreAllMocks()
+    } catch (e) {
+      error = e
+    }
+    expect(error).toMatchInlineSnapshot(`[AggregateError: Multiple mocks could not be restored.]`)
+    expect.assert(error instanceof AggregateError)
+    expect(error.errors).toMatchInlineSnapshot(`
+      [
+        [TypeError: Cannot redefine property: method],
+        [TypeError: Cannot redefine property: method],
+      ]
+    `)
+    expect(() => vi.restoreAllMocks()).not.toThrow()
+  })
 })
 
 describe('vi.spyOn() on Vite SSR', () => {

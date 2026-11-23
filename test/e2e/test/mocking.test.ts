@@ -1537,3 +1537,65 @@ test('importMock', async () => {
     }
   `)
 })
+
+test.for(['forks', 'vmThreads'])(
+  'a spy that cannot be restored is reported once and other files still run (%s)',
+  async (pool) => {
+    const passing = `
+import { expect, test } from 'vitest'
+test('runs', () => {
+  expect(1).toBe(1)
+})
+    `
+    const { errorTree, ctx } = await runInlineTests(
+      {
+        './a-frozen.test.ts': `
+import { expect, test, vi } from 'vitest'
+const target = { read: () => 'real' }
+test('spies on a method, then freezes its object', () => {
+  vi.spyOn(target, 'read')
+  Object.freeze(target)
+  expect(target.read()).toBe('real')
+})
+    `,
+        './b.test.ts': passing,
+        './c.test.ts': passing,
+      },
+      {
+        pool,
+        isolate: false,
+        sequence: { sequencer: StableTestFileOrderSorter },
+      },
+    )
+
+    expect(errorTree()).toMatchInlineSnapshot(`
+      {
+        "__unhandled_errors__": [
+          "Cannot redefine property: read",
+        ],
+        "a-frozen.test.ts": {
+          "spies on a method, then freezes its object": "passed",
+        },
+        "b.test.ts": {
+          "runs": "passed",
+        },
+        "c.test.ts": {
+          "runs": "passed",
+        },
+      }
+    `)
+    expect(
+      ctx!.state.getUnhandledErrors().map((error: any) => ({
+        message: error.message,
+        file: path.basename(error.VITEST_TEST_PATH),
+      })),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "file": "a-frozen.test.ts",
+          "message": "Cannot redefine property: read",
+        },
+      ]
+    `)
+  },
+)

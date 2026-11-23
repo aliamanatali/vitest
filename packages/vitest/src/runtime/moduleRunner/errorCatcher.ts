@@ -8,6 +8,18 @@ const processOff = process.off.bind(process)
 
 const dispose: (() => void)[] = []
 
+export function reportUnhandledError(worker: WorkerGlobalState, err: unknown, type: string): void {
+  const error = serializeValue(err)
+
+  if (typeof error === 'object' && error != null) {
+    error.VITEST_TEST_NAME = worker.current?.type === 'test' ? worker.current.name : undefined
+    if (worker.filepath) {
+      error.VITEST_TEST_PATH = worker.filepath
+    }
+  }
+  worker.rpc.onUnhandledError(error, type)
+}
+
 export function listenForErrors(state: () => WorkerGlobalState): void {
   dispose.forEach((fn) => fn())
   dispose.length = 0
@@ -22,15 +34,7 @@ export function listenForErrors(state: () => WorkerGlobalState): void {
       return
     }
 
-    const error = serializeValue(err)
-
-    if (typeof error === 'object' && error != null) {
-      error.VITEST_TEST_NAME = worker.current?.type === 'test' ? worker.current.name : undefined
-      if (worker.filepath) {
-        error.VITEST_TEST_PATH = worker.filepath
-      }
-    }
-    state().rpc.onUnhandledError(error, type)
+    reportUnhandledError(worker, err, type)
   }
 
   const uncaughtException = (e: Error) => catchError(e, 'Uncaught Exception', 'uncaughtException')

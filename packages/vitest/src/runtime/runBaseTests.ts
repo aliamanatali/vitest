@@ -14,6 +14,7 @@ import {
 } from '../utils/module-dependencies'
 import { detectAsyncLeaks } from './detect-async-leaks'
 import { closeInspector } from './inspector'
+import { reportUnhandledError } from './moduleRunner/errorCatcher'
 import { collectTests, startTests } from './runner/run'
 import { resolveTestRunner } from './runners'
 import { setupGlobalEnv } from './setup-node'
@@ -104,7 +105,11 @@ export async function run(
         // reset after tests, because user might call `vi.setConfig` in setupFile
         vi.resetConfig()
         // mocks should not affect different files
-        vi.restoreAllMocks()
+        try {
+          vi.restoreAllMocks()
+        } catch (error) {
+          reportUnhandledError(workerState, error, 'Unhandled Error')
+        }
         moduleRunner.mocker?.reset()
       }
     })
